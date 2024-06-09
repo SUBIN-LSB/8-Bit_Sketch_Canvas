@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>8-Bit Sketch Canvas</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.0/p5.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f0f0f0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+        }
+        #canvas-container {
+            position: relative;
+            width: 100%; /* 화면 전체 너비를 차지 */
+            max-width: 600px; /* 캔버스 최대 너비 */
+            height: auto;
+            text-align: center; /* 가운데 정렬을 위해 필요 */
+        }
+        canvas {
+            border: 1px solid #ccc;
+            display: block; /* 인라인 요소에서 블록 요소로 변경 */
+            margin: 0 auto; /* 가운데 정렬 */
+            margin-top: 10px; /* 캔버스 위쪽 여백 */
+        }
+        button {
+            background-color: #6fada7;
+            color: white;
+            border: none;
+            padding: 10px;
+            margin-right: 10px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #619690;
+        }
+        .controls {
+            margin-top: 10px;
+        }
+        .p5ColorPicker {
+            width: 70px !important; /* 너비 조정 */
+            height: 40px !important; /* 높이 조정 */
+            padding: 0 !important; /* 내부 간격 초기화 */
+            margin: 0 !important; /* 마진 초기화 */
+            background: none !important; /* 배경 초기화 */
+            border: 1px solid #ccc !important; /* 테두리 스타일 지정 */
+            border-radius: 4px !important; /* 테두리 반경 조정 */
+            cursor: pointer; /* 커서 스타일 */
+            outline: none; /* 포커스 스타일 */
+            display: none; /* 초기에 숨겨진 상태 */
+        }
+        /* 컬러피커 토글 버튼 스타일 */
+        .colorPickerToggle {
+            background-color: #6fada7;
+            color: white;
+            border: none;
+            padding: 10px;
+            cursor: pointer;
+        }
+        .colorPickerToggle:hover {
+            background-color: #619690;
+        }
+        /* 버튼 위치 조정 */
+        .button-container {
+            display: flex;
+            justify-content: center;
+            margin-top: 10px;
+        }
+        .button-container button {
+            margin-right: 10px;
+        }
+        /* Save 버튼 위치 설정 */
+        #save-button {
+            position: absolute;
+            bottom: -50px;
+            left: 50%;
+            transform: translateX(-50%);
+        }
+    </style>
+</head>
+<body>
+<h3> P I X E L &nbsp D R O W </h3>
+
+<div id="canvas-container">
+    <div class="button-container">
+        <script>
+            let pixelSize = 10;
+            let canvasWidth = 400;
+            let canvasHeight = 400;
+            let isDrawing = false;
+            let isErasing = false;
+            let currentColor = '#000000';
+            let history = [];
+            let drawingStarted = false;
+
+            function setup() {
+                let canvas = createCanvas(canvasWidth, canvasHeight);
+                canvas.parent('canvas-container'); // p5.js 캔버스를 container에 넣음
+                background(255);
+
+                // 그리기 도구 버튼
+                let drawButton = createButton('Draw');
+                drawButton.size(70, 40);
+                drawButton.mousePressed(useDrawingTool);
+
+                // 지우기 도구 버튼
+                let eraseButton = createButton('Erase');
+                eraseButton.size(70, 40);
+                eraseButton.mousePressed(useErasingTool);
+
+                // 모두 지우기 버튼
+                let clearButton = createButton('Clear All');
+                clearButton.size(70, 40);
+                clearButton.mousePressed(clearAll);
+
+                // 되돌리기 버튼
+                let undoButton = createButton('Undo');
+                undoButton.size(70, 40);
+                undoButton.mousePressed(undo);
+
+                // 컬러피커 토글 버튼
+                let colorPickerToggle = createButton('Color Picker');
+                colorPickerToggle.addClass('colorPickerToggle'); // 클래스 추가
+                colorPickerToggle.size(100, 40);
+                colorPickerToggle.mousePressed(toggleColorPicker);
+
+                // 색상 선택기
+                let colorPicker = createColorPicker('#000000');
+                colorPicker.size(70, 40);
+                colorPicker.style('display', 'none'); // 기본 컬러피커 숨기기
+                colorPicker.elt.className = 'p5ColorPicker'; // 클래스 이름 설정
+                colorPicker.input(() => {
+                    currentColor = colorPicker.value();
+                });
+
+                // 버튼을 HTML에 추가
+                let buttonContainer = document.querySelector('.button-container');
+                buttonContainer.appendChild(drawButton.elt);
+                buttonContainer.appendChild(eraseButton.elt);
+                buttonContainer.appendChild(clearButton.elt);
+                buttonContainer.appendChild(undoButton.elt);
+                buttonContainer.appendChild(colorPickerToggle.elt);
+                buttonContainer.appendChild(colorPicker.elt);
+
+                // 저장 버튼
+                let saveButton = createButton('Save');
+                saveButton.id('save-button'); // ID 설정
+                saveButton.size(70, 40);
+                saveButton.mousePressed(saveCanvasImage);
+                buttonContainer.appendChild(saveButton.elt);
+
+                // 초기 상태 저장
+                saveState();
+            }
+
+            function draw() {
+                if (mouseIsPressed) {
+                    if (mouseX < canvasWidth && mouseY < canvasHeight) {  // 드로잉 영역을 400x400으로 제한
+                        if (!drawingStarted) {
+                            saveState();
+                            drawingStarted = true;
+                        }
+                        if (isDrawing) {
+                            drawPixel();
+                        } else if (isErasing) {
+                            erasePixel();
+                        }
+                    }
+                } else {
+                    drawingStarted = false;
+                }
+
+                // 그리드 그리기
+                drawGrid();
+            }
+
+            function useDrawingTool() {
+                isDrawing = true;
+                isErasing = false;
+            }
+
+            function useErasingTool() {
+                isDrawing = false;
+                isErasing = true;
+            }
+
+            function clearAll() {
+                saveState();
+                fill(255);
+                noStroke();
+                rect(0, 0, canvasWidth, canvasHeight);
+            }
+
+            function drawPixel() {
+                let x = floor(mouseX / pixelSize) * pixelSize;
+                let y = floor(mouseY / pixelSize) * pixelSize;
+                fill(currentColor);
+                noStroke();
+                rect(x, y, pixelSize, pixelSize);
+            }
+
+            function erasePixel() {
+                let x = floor(mouseX / pixelSize) * pixelSize;
+                let y = floor(mouseY / pixelSize) * pixelSize;
+                fill(255);
+                noStroke();
+                rect(x, y, pixelSize, pixelSize);
+            }
+
+            function undo() {
+                if (history.length > 1) {
+                    history.pop();
+                    let previousState = history[history.length - 1];
+                    image(previousState, 0, 0);
+                }
+            }
+
+            function saveState() {
+                history.push(get(0, 0, canvasWidth, canvasHeight));
+                if (history.length > 10) {  // 히스토리 제한 (메모리 절약을 위해)
+                    history.shift();
+                }
+            }
+
+            function toggleColorPicker() {
+                let colorPicker = select('.p5ColorPicker');
+                if (colorPicker.style('display') === 'none') {
+                    colorPicker.style('display', 'block');
+                } else {
+                    colorPicker.style('display', 'none');
+                }
+            }
+
+            function saveCanvasImage() {
+                saveCanvas('8-bit-sketch', 'png');
+            }
+
+            // 그리드 그리기 함수
+            function drawGrid() {
+                stroke(240); // 그리드 선 색상
+                for (let x = 0; x <= canvasWidth; x += pixelSize) {
+                    line(x, 0, x, canvasHeight);
+                }
+                for (let y = 0; y <= canvasHeight; y += pixelSize) {
+                    line(0, y, canvasWidth, y);
+                }
+            }
+        </script>
+    </div>
+</div>
+<h3> A N I T H I N G </h3>
+</body>
+</html>
